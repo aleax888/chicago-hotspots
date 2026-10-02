@@ -1,3 +1,8 @@
 venv/
 outputs/
 dataset/
+report/main.*
+!report/main.tex
+paper/main.*
+!paper/main.tex
+AGENTS.md

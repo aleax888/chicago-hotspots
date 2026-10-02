@@ -1,0 +1,778 @@
+\documentclass[11pt,a4paper]{article}
+
+% ============================= PAQUETES ===================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{pdflscape}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[numbers]{natbib}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    citecolor=blue!50!black,
+    urlcolor=blue!50!black
+}
+
+\titleformat{\section}{\normalfont\Large\bfseries}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection.}{0.6em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\setlength{\headheight}{14.5pt}
+\rhead{Informe Final -- Análisis Exploratorio de Datos}
+\lhead{UNSA -- Tópicos en Ciencia de Datos}
+\rfoot{\thepage}
+
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+% ============================= PORTADA =====================================
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{1.5cm}
+
+{\large Universidad Nacional de San Agustín de Arequipa\par}
+{\large Maestría en Ciencia de la Computación\par}
+{\large Curso: Tópicos en Ciencia de Datos\par}
+\vspace{0.3cm}
+{\small Docente: Ana María Cuadros Valdivia\par}
+
+\vspace{2.5cm}
+{\Huge\bfseries Informe Final\par}
+\vspace{0.5cm}
+{\Large Análisis Exploratorio de Datos\par}
+\vspace{0.8cm}
+{\large\itshape Patrones espacio-temporales de criminalidad en Chicago (2017)\par}
+{\large\itshape como base para una propuesta de Visual Analytics\par}
+
+\vspace{2.5cm}
+{\large\bfseries Estudiante:\par}
+{\large Alex Maglio Neyra Herrada\par}
+
+\vspace{2cm}
+{\large Fecha de presentación: 19 de septiembre de 2026\par}
+
+\vfill
+{\small Paper base del proyecto final de Visual Analytics:\par
+Garcia-Zanabria et al. (2021), \textit{CrimAnalyzer: Understanding Crime
+Patterns in São Paulo}, IEEE TVCG.\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Definición del problema}
+
+El problema que se aborda es la dificultad que enfrentan los analistas de
+seguridad pública y los tomadores de decisión de una ciudad para identificar,
+de forma rápida e interactiva, \textbf{dónde y cuándo se concentran los
+distintos tipos de delito}, y qué factores contextuales (tipo de lugar, hora
+del día, día de la semana) se asocian a una mayor o menor probabilidad de que
+un incidente termine en arresto. Tradicionalmente, este análisis se apoya en
+mapas de calor estáticos que muestran la intensidad del crimen en un momento
+dado, pero que no permiten explorar cómo cambian esos patrones en el tiempo
+ni comparar el comportamiento de distintos subtipos de delito de forma
+interactiva.
+
+Resolver este problema es relevante en varios niveles:
+
+\begin{itemize}
+    \item \textbf{Social:} una mejor comprensión de los patrones delictivos
+    contribuye a políticas de seguridad ciudadana más focalizadas.
+    \item \textbf{De gestión pública / negocio:} los departamentos de policía
+    operan con recursos de patrullaje limitados; identificar hotspots
+    espaciales y temporales permite asignarlos de manera más eficiente.
+    \item \textbf{Científica:} el trabajo se enmarca en la línea de
+    investigación de \textit{Visual Analytics} aplicada a criminalidad, cuyo
+    referente directo es \textbf{CrimAnalyzer} \cite{crimanalyzer}, un sistema
+    visual-interactivo desarrollado para estudiar hotspots de crimen y su
+    evolución temporal en São Paulo mediante factorización de matrices no
+    negativas (NMF) en lugar de los métodos estadísticos tradicionales de
+    mapeo de calor (KDE, Getis-Ord Gi*).
+\end{itemize}
+
+El área de conocimiento involucrada es \textbf{Visual Analytics aplicado a
+Seguridad Pública / Crime Analytics}, dentro del campo más amplio de la
+Ciencia de Datos.
+
+Al finalizar el proyecto se espera contar con un sistema de Visual Analytics
+--inspirado en la metodología de CrimAnalyzer pero aplicado a un dataset
+público de la ciudad de Chicago-- que permita a un analista explorar de
+forma interactiva la concentración espacial del crimen (hotspots), su
+evolución temporal y su relación con variables como el tipo de lugar y la
+tasa de esclarecimiento (arresto). El presente informe constituye la etapa
+de \textbf{análisis exploratorio} que sienta las bases de conocimiento y de
+calidad de datos necesarias para diseñar dicho sistema.
+
+% ============================================================================
+\section{Hipótesis / Preguntas de investigación}
+
+\subsection{Motivación}
+
+Las hipótesis de este informe surgen de dos fuentes complementarias:
+
+\begin{enumerate}
+    \item El artículo científico base, \textbf{CrimAnalyzer}
+    \cite{crimanalyzer}, que identifica tres desafíos centrales al analizar
+    crimen en una ciudad: (i) la necesidad de explorar patrones
+    \emph{espaciales} locales (hotspots), (ii) identificar hotspots que no
+    necesariamente son los de mayor volumen pero sí relevantes para la
+    investigación criminal, y (iii) comprender la dinámica \emph{temporal}
+    de esos patrones.
+    \item Conocimiento de dominio en criminología (estacionalidad horaria de
+    los delitos, diferencias en la tasa de esclarecimiento según el tipo de
+    delito, y la asociación conocida entre violencia doméstica y el hogar
+    como lugar de ocurrencia).
+\end{enumerate}
+
+A partir de esto se formulan 4 hipótesis (se exige un mínimo de 3), cada una
+directamente respondible con las variables disponibles en el dataset de
+Chicago: \texttt{Primary Type}, \texttt{Date}, \texttt{District},
+\texttt{Location Description}, \texttt{Arrest} y \texttt{Domestic}.
+
+\subsection{Hipótesis formuladas}
+
+\begin{description}[leftmargin=1.6cm, style=nextline]
+    \item[Hipótesis 1 (espacial):] ¿Se concentra el crimen de forma desigual
+    entre los distritos policiales de Chicago, evidenciando un patrón de
+    \emph{hotspots} espaciales comparable al reportado por CrimAnalyzer para
+    São Paulo?
+
+    \item[Hipótesis 2 (temporal):] ¿El volumen de delitos varía de forma
+    significativa según la hora del día y el día de la semana, mostrando
+    patrones identificables de picos y valles horarios?
+
+    \item[Hipótesis 3 (esclarecimiento):] ¿La probabilidad de que un
+    incidente termine en arresto depende del tipo de delito
+    (\texttt{Primary Type})?
+
+    \item[Hipótesis 4 (violencia doméstica y lugar):] ¿La proporción de
+    incidentes clasificados como violencia doméstica varía significativamente
+    según el tipo de lugar donde ocurre el delito
+    (\texttt{Location Description})?
+\end{description}
+
+% ============================================================================
+\section{Plan de análisis}
+
+El análisis sigue las etapas estándar del ciclo de vida de Ciencia de Datos
+aplicadas al pipeline de AED:
+
+\begin{enumerate}
+    \item \textbf{Obtención de datos:} descarga del extracto oficial del
+    dataset "Crimes -- 2001 to Present" de la Ciudad de Chicago
+    correspondiente al período enero--agosto de 2017.
+    \item \textbf{Wrangling:} parseo de fechas, creación de variables
+    derivadas (\texttt{Hour}, \texttt{DayOfWeek}, \texttt{Month}),
+    recodificación de variables booleanas.
+    \item \textbf{Limpieza (cleaning):} cuantificación y tratamiento de
+    valores nulos, detección de valores fuera de dominio, verificación de
+    duplicados.
+    \item \textbf{Exploración (AED):} estadística descriptiva univariada y
+    bivariada, análisis de correlación.
+    \item \textbf{Visualización:} generación de gráficos (histogramas,
+    boxplots, barras, heatmaps, violin plot, mapa de dispersión y dashboard).
+    \item \textbf{Respuesta a hipótesis:} contraste de cada hipótesis con
+    evidencia visual y pruebas estadísticas ($\chi^2$ de independencia).
+    \item \textbf{Conclusiones y puente a Visual Analytics:} identificación
+    de los hallazgos y problemas de calidad prioritarios para el diseño del
+    sistema interactivo.
+\end{enumerate}
+
+% ============================================================================
+\section{Fuente de datos}
+
+\textbf{Origen.} El dataset se obtiene del portal de datos abiertos de la
+Ciudad de Chicago, \textit{Chicago Data Portal}, en el conjunto
+\href{https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2}{\texttt{Crimes -- 2001 to Present}}
+(identificador \texttt{ijzp-q8t2}) \cite{chicagoportal}. Es publicado y
+mantenido por el \textbf{Departamento de Policía de Chicago (CPD)} y se
+extrae directamente de su sistema operacional \textbf{CLEAR} (\textit{Citizen
+Law Enforcement Analysis and Reporting}). El portal se actualiza a diario y
+excluye los últimos 7 días para permitir la verificación de los reportes.
+Para este informe se utilizó el extracto correspondiente al período
+\textbf{1 de enero al 25 de agosto de 2017} (172,327 registros), obtenido
+como réplica exacta del esquema oficial desde un repositorio público de
+datos abiertos en GitHub que re-expone el dataset de la ciudad
+\cite{githubmirror}.
+
+\textbf{Área de conocimiento.} Seguridad pública / criminología
+computacional, con técnicas de Ciencia de Datos y Visual Analytics.
+
+\textbf{Problema que se quiere resolver.} A nivel de negocio: apoyar la
+asignación de recursos de patrullaje y la comprensión de patrones
+delictivos por parte de analistas y tomadores de decisión. A nivel
+computacional: caracterizar la distribución espacio-temporal del crimen y
+sus factores asociados (lugar, tipo, esclarecimiento) a partir de datos
+tabulares de incidentes.
+
+\textbf{Por qué se capturaron las variables.} Los campos del dataset
+corresponden a los datos que el sistema CLEAR registra por razones
+administrativas y legales de cada denuncia: identificación del caso,
+clasificación del delito (\texttt{IUCR}, \texttt{Primary Type},
+\texttt{Description}, \texttt{FBI Code}), ubicación aproximada
+(\texttt{Block}, \texttt{Beat}, \texttt{District}, \texttt{Ward},
+\texttt{Community Area}, coordenadas), fecha/hora del incidente, y dos
+banderas de interés investigativo (\texttt{Arrest}, \texttt{Domestic}). La
+ubicación se publica únicamente a nivel de cuadra (\textit{block}) para
+proteger la privacidad de las víctimas.
+
+\textbf{Referencia del paper base.} El proyecto de Visual Analytics de este
+curso toma como referencia metodológica \textbf{CrimAnalyzer}
+\cite{crimanalyzer}, que originalmente aplicó un enfoque de detección de
+hotspots basado en NMF sobre datos policiales reales de São Paulo. El
+presente informe traslada esa misma pregunta de investigación --y una
+metodología equivalente de análisis exploratorio-- a un dataset de acceso
+público (Chicago), evitando así las restricciones de acceso del dataset
+original de São Paulo, que no está disponible públicamente.
+
+% ============================================================================
+\section{Formato original del dataset}
+
+El dataset se distribuye en formato \textbf{CSV} (también disponible en
+JSON y GeoJSON a través de la API abierta Socrata/SODA del portal, y
+mediante el paquete de Python \texttt{sodapy}). Particularidades encontradas
+al leerlo:
+
+\begin{itemize}
+    \item El campo \texttt{Date} viene como \textbf{texto} con el formato
+    \texttt{MM/DD/AAAA HH:MM:SS AM/PM}, por lo que requiere un parseo
+    explícito (\texttt{pd.to\_datetime}) antes de poder derivar variables
+    temporales; no llega tipado como fecha nativa.
+    \item Los campos \texttt{Arrest} y \texttt{Domestic} sí llegan
+    correctamente tipados como booleanos (\texttt{true}/\texttt{false}).
+    \item Los registros sin geocodificación no traen un marcador explícito de
+    nulo, sino que las columnas de coordenadas (\texttt{X Coordinate},
+    \texttt{Y Coordinate}, \texttt{Latitude}, \texttt{Longitude},
+    \texttt{Location}) aparecen vacías, y \texttt{pandas} las infiere
+    correctamente como \texttt{NaN} al cargarlas.
+    \item Variables categóricas codificadas numéricamente
+    (\texttt{District}, \texttt{Ward}, \texttt{Beat},
+    \texttt{Community Area}) se cargan por defecto como tipo entero, lo cual
+    puede inducir a tratarlas erróneamente como variables continuas si no se
+    documenta su verdadera naturaleza nominal.
+\end{itemize}
+
+% ============================================================================
+\section{Descripción del conjunto de datos}
+
+\subsection{A nivel de atributos}
+
+El dataset cuenta con \textbf{172,327 registros} y \textbf{22 atributos}. La
+Tabla \ref{tab:atributos} resume cada uno de ellos.
+
+\begin{landscape}
+\begin{longtable}{P{2.6cm} P{4.0cm} P{1.6cm} P{2.0cm} P{4.4cm} P{3.4cm}}
+\caption{Descripción de atributos del dataset \textit{Crimes -- 2017 (Chicago)}}
+\label{tab:atributos}\\
+\toprule
+\textbf{Atributo} & \textbf{Significado} & \textbf{Tipo} & \textbf{Nulos (n / \%)} & \textbf{Rango / valores únicos} & \textbf{Relevancia}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Atributo} & \textbf{Significado} & \textbf{Tipo} & \textbf{Nulos (n / \%)} & \textbf{Rango / valores únicos} & \textbf{Relevancia}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+ID & Identificador único del registro & Numérico discreto (id) & 0 / 0.00\% & 172,327 valores únicos & Baja (solo identificador) \\
+Case Number & Número de caso asignado por CPD & Categórico nominal (texto) & 0 / 0.00\% & 172,294 únicos (27 casos de homicidio con 2--4 víctimas comparten número) & Media (granularidad de registros) \\
+Date & Fecha y hora del incidente & Fecha/hora (texto a parsear) & 0 / 0.00\% & 01/01/2017 -- 25/08/2017 & Alta (H2) \\
+Block & Dirección aproximada a nivel de cuadra & Categórico nominal & 0 / 0.00\% & 25,385 valores únicos & Baja (alta cardinalidad) \\
+IUCR & Código de clasificación policial de Illinois & Categórico nominal & 0 / 0.00\% & 318 categorías & Media (subcategoría del delito) \\
+Primary Type & Categoría general del delito & Categórico nominal & 0 / 0.00\% & 32 categorías (top: THEFT 40,742; BATTERY 32,394) & Alta (H1, H3) \\
+Description & Subtipo textual del delito & Categórico nominal & 0 / 0.00\% & Cientos de valores (detalle de IUCR) & Media \\
+Location Description & Tipo de lugar donde ocurrió & Categórico nominal & 515 / 0.30\% & 123 categorías (top: STREET 38,980) & Alta (H4) \\
+Arrest & Si hubo arresto & Booleano & 0 / 0.00\% & \{True, False\}; tasa global = 19.24\% & Alta (H3) \\
+Domestic & Si se clasificó como violencia doméstica & Booleano & 0 / 0.00\% & \{True, False\}; tasa global = 16.31\% & Alta (H4) \\
+Beat & Subdivisión de patrullaje (anidada en District) & Categórico nominal (cod. numérico) & 0 / 0.00\% & 274 valores; rango 111--2535 & Media (redundante con District) \\
+District & Distrito policial & Categórico nominal (cod. numérico) & 0 / 0.00\% & 23 valores (1--25; outlier administrativo 31 con 2 registros) & Alta (H1) \\
+Ward & Distrito electoral / municipal & Categórico nominal (cod. numérico) & 1 / 0.00\% & 50 valores (1--50) & Media \\
+Community Area & Área comunitaria oficial de Chicago & Categórico nominal (cod. numérico) & 0 explícitos & Rango 0--77 (válido 1--77; 1 registro con valor 0 fuera de dominio) & Media \\
+FBI Code & Clasificación del delito según el FBI & Categórico nominal & 0 / 0.00\% & 26 categorías & Media \\
+X Coordinate & Coordenada plana (State Plane, pies) & Numérico continuo & 6,102 / 3.54\% & media $\approx$ 1,164,934 pies & Media (soporte geoespacial) \\
+Y Coordinate & Coordenada plana (State Plane, pies) & Numérico continuo & 6,102 / 3.54\% & -- & Media (soporte geoespacial) \\
+Year & Año del registro & Numérico discreto & 0 / 0.00\% & Constante = 2017 & Nula (sin variabilidad) \\
+Updated On & Fecha de última actualización del registro & Fecha/hora & 0 / 0.00\% & Cercana a ago--sep 2017 & Baja (control de versión, no analítica) \\
+Latitude & Latitud (WGS84) & Numérico continuo & 6,102 / 3.54\% & 41.64° -- 42.02° & Alta (H1, mapa geográfico) \\
+Longitude & Longitud (WGS84) & Numérico continuo & 6,102 / 3.54\% & $-$87.93° -- $-$87.52° & Alta (H1, mapa geográfico) \\
+Location & Texto combinado "(lat, long)" & Categórico (texto redundante) & 6,102 / 3.54\% & Redundante con Latitude/Longitude & Nula (redundante) \\
+\end{longtable}
+\end{landscape}
+
+\textbf{Medidas de posición y dispersión.} La Tabla \ref{tab:descriptivos}
+presenta los estadísticos descriptivos de las variables numéricas /
+codificadas más relevantes.
+
+\begin{table}[H]
+\centering
+\caption{Estadísticos descriptivos de variables numéricas seleccionadas}
+\label{tab:descriptivos}
+\small
+\begin{tabular}{lrrrrrrrr}
+\toprule
+Variable & Media & Desv. est. & Mín & Q1 & Mediana & Q3 & Máx & Asimetría\\
+\midrule
+Hour (hora, 0--23) & 13.21 & 6.53 & 0 & 9 & 14 & 19 & 23 & $-0.45$\\
+Beat & 1142.51 & 698.24 & 111 & 611 & 1024 & 1713 & 2535 & 0.41\\
+District & 11.20 & 6.97 & 1 & 6 & 10 & 17 & 31 & 0.41\\
+Ward & 23.15 & 14.09 & 1 & 10 & 24 & 34 & 50 & 0.12\\
+Community Area & 36.77 & 21.37 & 0 & 23 & 32 & 54 & 77 & 0.24\\
+Latitude (°) & 41.84 & 0.09 & 41.64 & 41.77 & 41.86 & 41.91 & 42.02 & $-0.11$\\
+Longitude (°) & $-87.67$ & 0.06 & $-87.93$ & $-87.71$ & $-87.66$ & $-87.63$ & $-87.52$ & $-0.34$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Ninguna de estas variables numéricas presenta asimetría marcada (todos los
+coeficientes están entre $-0.45$ y $0.41$); la variable \texttt{Hour}
+muestra una leve asimetría negativa, coherente con la mayor concentración de
+delitos en horas de la tarde/noche (ver Sección \ref{sec:hipotesis}). No se
+identificaron outliers numéricos extremos en coordenadas geográficas: el
+rango de latitud/longitud es consistente con los límites geográficos reales
+de la ciudad de Chicago.
+
+\subsection{A nivel de registros}
+
+Cada fila del dataset representa \textbf{un incidente delictivo reportado} a
+la policía de Chicago (es un \emph{reporte}, no necesariamente un delito
+judicialmente confirmado). La variable \texttt{Primary Type} funciona como
+la etiqueta o clase principal (32 categorías), mientras que \texttt{Arrest}
+y \texttt{Domestic} son etiquetas binarias adicionales de interés
+investigativo. La granularidad es, en general, de un registro por incidente,
+\textbf{con una excepción documentada}: en los casos de \texttt{HOMICIDE} el
+propio proveedor de datos indica que la granularidad es \emph{por víctima}
+y no por caso; esto se confirmó empíricamente: 27 números de caso
+(\texttt{Case Number}) están asociados a más de un registro (22 casos con 2
+víctimas, 4 casos con 3 víctimas y 1 caso con 4 víctimas), y el 100\% de
+esos 60 registros corresponden a \texttt{Primary Type = HOMICIDE}. La
+ubicación se reporta a nivel de cuadra (\textit{block}), no de dirección
+exacta, por motivos de privacidad de las víctimas.
+
+\subsection{Relación entre atributos}
+
+Se calcularon las correlaciones de \textbf{Pearson} y \textbf{Spearman}
+entre las variables numéricas / codificadas disponibles (Tabla
+\ref{tab:correlacion}); ambos coeficientes arrojaron valores muy similares.
+
+\begin{table}[H]
+\centering
+\caption{Matriz de correlación de Pearson entre atributos numéricos}
+\label{tab:correlacion}
+\small
+\begin{tabular}{lrrrrrrr}
+\toprule
+ & Beat & District & Ward & Com. Area & Hour & Arrest & Domestic\\
+\midrule
+Beat & 1.00 & 1.00 & 0.66 & $-0.49$ & 0.00 & $-0.04$ & $-0.06$\\
+District & 1.00 & 1.00 & 0.66 & $-0.49$ & 0.00 & $-0.04$ & $-0.06$\\
+Ward & 0.66 & 0.66 & 1.00 & $-0.53$ & 0.00 & $-0.03$ & $-0.08$\\
+Community Area & $-0.49$ & $-0.49$ & $-0.53$ & 1.00 & 0.00 & 0.04 & 0.10\\
+Hour & 0.00 & 0.00 & 0.00 & 0.00 & 1.00 & 0.05 & $-0.04$\\
+Arrest & $-0.04$ & $-0.04$ & $-0.03$ & 0.04 & 0.05 & 1.00 & $-0.03$\\
+Domestic & $-0.06$ & $-0.06$ & $-0.08$ & 0.10 & $-0.04$ & $-0.03$ & 1.00\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Hallazgos relevantes:}
+\begin{itemize}
+    \item \textbf{Redundancia estructural fuerte:} \texttt{Beat} y
+    \texttt{District} tienen una correlación de $r \approx 1.00$, lo cual es
+    esperado porque \texttt{Beat} es una subdivisión anidada dentro de
+    \texttt{District}: ambas variables aportan prácticamente la misma
+    información a distinta granularidad.
+    \item \textbf{Relación moderada esperada:} \texttt{Ward} y
+    \texttt{Community Area} guardan una correlación moderada
+    ($|r|\approx 0.5$--$0.66$) con \texttt{District}/\texttt{Beat}, dado que
+    todas son formas alternativas de particionar geográficamente la ciudad.
+    \item \textbf{Relación inesperada (casi nula):} \texttt{Hour} es
+    prácticamente independiente ($r\approx 0.00$) de todas las variables
+    espaciales, lo que sugiere que el patrón horario del crimen es similar
+    en toda la ciudad y no varía sustancialmente de un distrito a otro; esto
+    debe validarse en la etapa de Visual Analytics, ya que el coeficiente de
+    Pearson no captura bien relaciones no lineales o de variables
+    cíclicas como la hora.
+    \item Las variables \texttt{Arrest} y \texttt{Domestic} muestran
+    correlaciones lineales débiles con el resto ($|r|\le 0.10$); esto no
+    implica ausencia de relación, sino que dichas relaciones son mejor
+    capturadas por pruebas para variables categóricas (ver $\chi^2$ en
+    Sección \ref{sec:hipotesis}) que por un coeficiente de correlación
+    lineal.
+\end{itemize}
+
+% ============================================================================
+\section{Problemas identificados y transformaciones (data wrangling)}
+
+\subsection{Problemas detectados en los datos}
+
+\begin{enumerate}
+    \item \textbf{Valores nulos en coordenadas geográficas}
+    (\texttt{X Coordinate}, \texttt{Y Coordinate}, \texttt{Latitude},
+    \texttt{Longitude}, \texttt{Location}): 6,102 registros (3.54\%) sin
+    geocodificación.
+    \item \textbf{Valores nulos en \texttt{Location Description}}: 515
+    registros (0.30\%).
+    \item \textbf{Valor nulo en \texttt{Ward}}: 1 registro (0.0006\%).
+    \item \textbf{Inconsistencia de dominio en \texttt{District}}: 2
+    registros con \texttt{District = 31}, un código administrativo que no
+    corresponde a ninguno de los 22 distritos reales de patrullaje de
+    Chicago.
+    \item \textbf{Inconsistencia de dominio en \texttt{Community Area}}: 1
+    registro con valor 0, fuera del rango válido de la ciudad (1--77).
+    \item \textbf{Artefacto de captura horaria:} se detectó una
+    concentración anómala de reportes exactamente a las 12:00:00~PM: el
+    43.5\% de los 10,427 registros de la hora 12 tienen minuto y segundo
+    exactamente en cero, frente a solo 31.6\% en la hora de control (13:00).
+    Esto sugiere que "mediodía en punto" se usa como marca de tiempo por
+    defecto cuando la hora exacta del incidente es desconocida, lo cual
+    puede sesgar cualquier análisis fino de patrones horarios si no se
+    documenta.
+    \item \textbf{Redundancia de variables:} \texttt{Beat} y
+    \texttt{District} están altamente correlacionados ($r\approx 1.00$)
+    porque \texttt{Beat} es una subdivisión anidada de \texttt{District}.
+    \item \textbf{Formato de fecha como texto:} el campo \texttt{Date}
+    requiere parseo explícito antes de poder derivar variables temporales.
+    \item \textbf{Codificación numérica de variables categóricas:}
+    \texttt{District}, \texttt{Ward}, \texttt{Beat} y
+    \texttt{Community Area} son códigos categóricos representados como
+    números, lo que puede inducir a tratarlos erróneamente como variables
+    continuas.
+    \item \textbf{Alta cardinalidad y cola larga en variables categóricas:}
+    \texttt{Location Description} (123 categorías) e \texttt{IUCR} (318
+    categorías) tienen muchas categorías con muy baja frecuencia.
+    \item \textbf{Granularidad no uniforme en \texttt{Case Number}:} 27
+    números de caso están asociados a más de un registro (2 a 4 filas),
+    correspondiendo en el 100\% de los casos a homicidios con múltiples
+    víctimas, lo cual debe tenerse en cuenta al contar "incidentes" versus
+    "registros".
+    \item \textbf{Cobertura temporal parcial:} el extracto usado cubre del
+    1 de enero al 25 de agosto de 2017 (no el año calendario completo), por
+    lo que las comparaciones de totales brutos por mes deben normalizarse
+    por número de días para no favorecer artificialmente a los meses con
+    más días (ver H2 en la Sección \ref{sec:hipotesis}).
+\end{enumerate}
+
+\subsection{Transformaciones realizadas}
+
+\begin{enumerate}
+    \item \textbf{Nulos en coordenadas geográficas:} no se imputaron (crear
+    una ubicación ficticia distorsionaría el análisis espacial); se
+    excluyen explícitamente solo en los análisis que requieren coordenadas
+    (mapa de dispersión, Figura \ref{fig:mapa}), documentando el 3.54\%
+    excluido, mientras se conservan para el resto de los análisis.
+    \item \textbf{Nulos en \texttt{Location Description}:} se excluyen
+    únicamente del análisis de la Hipótesis 4, sin afectar el resto del
+    dataset.
+    \item \textbf{Registro con \texttt{Ward} nulo:} al tratarse de un único
+    registro (0.0006\% del total), se descarta solo en agregaciones por
+    \texttt{Ward}, sin impacto material en los resultados.
+    \item \textbf{\texttt{District = 31}:} se excluye de los análisis
+    agregados por distrito (2 de 172,327 registros) para no introducir una
+    categoría espuria en los gráficos espaciales, documentando su existencia
+    en vez de eliminarlo del dataset completo.
+    \item \textbf{\texttt{Community Area = 0}:} se documenta como "no
+    geolocalizado a nivel de área comunitaria" y se excluye únicamente de
+    los análisis agregados por dicha variable.
+    \item \textbf{Parseo de fecha:} conversión de \texttt{Date} (texto) a
+    tipo \texttt{datetime} de pandas; se derivan las nuevas variables
+    \texttt{Hour}, \texttt{DayOfWeek} y \texttt{Month} (creación de
+    variables / \textit{feature engineering}).
+    \item \textbf{Recodificación booleano $\rightarrow$ numérico:}
+    \texttt{Arrest} y \texttt{Domestic} se mapean también a 0/1 para poder
+    incluirlas en la matriz de correlación y en las pruebas $\chi^2$.
+    \item \textbf{Tipificación explícita:} \texttt{District}, \texttt{Ward},
+    \texttt{Beat} y \texttt{Community Area} se documentan y tratan
+    explícitamente como variables categóricas nominales codificadas,
+    evitando interpretarlas como magnitudes continuas pese a que pandas las
+    infiere como enteros.
+    \item \textbf{Verificación de duplicados:} se comprobó la unicidad de
+    \texttt{ID} y de filas completas (0 duplicados encontrados); no se
+    requirió deduplicación general. Se documentó por separado el caso de
+    \texttt{Case Number} repetido en homicidios (ver arriba), que
+    \emph{no} es un error de calidad sino una característica real del
+    dominio.
+    \item \textbf{Reducción de cardinalidad para visualización:} en los
+    gráficos de barras y en el violin plot se seleccionan los "top-N"
+    valores más frecuentes (5, 6, 8 o 10, según el gráfico) de las
+    variables de alta cardinalidad (\texttt{Primary Type},
+    \texttt{Location Description}) para mantener las visualizaciones
+    legibles.
+    \item \textbf{Normalización temporal para comparación justa entre
+    meses:} dado que agosto de 2017 solo tiene 25 días en este extracto
+    (frente a 28--31 días de los demás meses), se calculó adicionalmente la
+    \textbf{tasa diaria promedio} de delitos por mes (total de delitos /
+    número de días con datos) para evitar conclusiones erróneas basadas
+    únicamente en el conteo bruto.
+\end{enumerate}
+
+% ============================================================================
+\section{Exploración y respuesta a las hipótesis}
+\label{sec:hipotesis}
+
+La Figura \ref{fig:dashboard} presenta un dashboard resumen con cuatro vistas
+generales del dataset, que contextualiza las respuestas detalladas a cada
+hipótesis presentadas a continuación.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{../outputs/figures/fig10_dashboard.png}
+\caption{Dashboard resumen: delitos por mes, por hora del día, por día de la
+semana y los 5 distritos con más delitos. Chicago, 2017.}
+\label{fig:dashboard}
+\end{figure}
+
+\subsection*{Hipótesis 1: concentración espacial (hotspots)}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{../outputs/figures/fig3_top_crime_types.png}
+\caption{Los 10 tipos de delito más frecuentes en Chicago, 2017.}
+\label{fig:top_tipos}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{../outputs/figures/fig6_district_scatter_map.png}
+\caption{Distribución geográfica de una muestra aleatoria de 20,000 delitos,
+coloreados por distrito policial. Se aprecia claramente la forma de la
+ciudad de Chicago y la delimitación de los 22 distritos de patrullaje.}
+\label{fig:mapa}
+\end{figure}
+
+\textbf{Interpretación.} THEFT (40,742) y BATTERY (32,394) son, por amplio
+margen, los tipos de delito más frecuentes (Figura \ref{fig:top_tipos}). En
+cuanto a distribución espacial, los 5 distritos con más delitos --11
+(11,778), 6 (10,754), 8 (10,698), 1 (9,748) y 4 (9,437)-- concentran el
+\textbf{30.4\%} del total de incidentes (excluyendo el código administrativo
+atípico \texttt{District 31}), mientras que el distrito con menos delitos
+(20) registra solo 2,804. La Figura \ref{fig:mapa} confirma visualmente que
+el crimen no se distribuye uniformemente en el espacio urbano.
+
+\textbf{Conclusión intermedia.} Se \textbf{confirma} la Hipótesis 1: existe
+una concentración espacial desigual del crimen (aproximadamente un tercio de
+los delitos ocurre en solo 5 de los 23 distritos), consistente con la
+existencia de hotspots espaciales, tal como plantea CrimAnalyzer para São
+Paulo. La concentración es notoria pero no extrema, lo que sugiere que un
+enfoque como el de CrimAnalyzer (basado en NMF, capaz de detectar también
+hotspots "menores pero recurrentes") aportaría más valor que un simple
+ranking por volumen.
+
+\subsection*{Hipótesis 2: patrones temporales}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{../outputs/figures/fig1_hour_histogram.png}
+\caption{Distribución de delitos según la hora del día. Chicago, 2017.}
+\label{fig:hist_hora}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.68\textwidth]{../outputs/figures/fig5_hour_weekday_heatmap.png}
+\caption{Delitos por hora del día y día de la semana. Chicago, 2017.}
+\label{fig:heatmap_hora_dia}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{../outputs/figures/fig8_hour_violin_by_type.png}
+\caption{Distribución horaria según los 5 tipos de delito más frecuentes.}
+\label{fig:violin}
+\end{figure}
+
+\textbf{Interpretación.} La hora con más delitos es las 12:00 (10,427
+casos) y la de menos es las 5:00 de la madrugada (2,511 casos) --Figura
+\ref{fig:hist_hora}--. Sin embargo, como se documentó en la Sección 7, el
+pico de las 12:00 está \textbf{inflado por un artefacto de captura}
+(uso de "mediodía en punto" como marca por defecto), por lo que el patrón
+horario real probablemente crece de forma más gradual desde la mañana hasta
+la noche, como sugiere el heatmap de la Figura \ref{fig:heatmap_hora_dia}:
+la franja de 12:00 a 20:00 concentra visiblemente más actividad en todos los
+días de la semana, sin diferencias notorias entre día laborable y fin de
+semana. Por día de la semana, la variación es baja (entre 24,204 y 25,813
+delitos), con un ligero máximo el viernes. Al comparar meses mediante la
+tasa diaria promedio (para corregir por la duración desigual de los meses,
+dado que agosto solo tiene 25 días en este extracto), julio resulta el mes
+con mayor intensidad (781.7 delitos/día) y marzo el de menor intensidad
+(654.1 delitos/día) --una conclusión distinta a la que se obtendría
+comparando solo totales brutos, donde febrero aparentaría ser el más bajo
+simplemente por tener menos días--. La Figura \ref{fig:violin} muestra
+además que distintos tipos de delito tienen "firmas" horarias distintas
+(por ejemplo, robos y hurtos muestran mayor densidad vespertina que otros
+tipos).
+
+\textbf{Conclusión intermedia.} Se \textbf{confirma} la Hipótesis 2: existen
+patrones temporales claros y estadísticamente relevantes tanto a nivel de
+hora del día como de mes, aunque el día de la semana influye poco. Estos
+patrones horarios varían además según el tipo de delito, lo que refuerza la
+necesidad de vistas temporales interactivas (no un solo agregado) en la
+etapa de Visual Analytics.
+
+\subsection*{Hipótesis 3: tasa de arresto según tipo de delito}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{../outputs/figures/fig7_arrest_rate_by_type.png}
+\caption{Tasa de arresto según tipo de delito (8 tipos más frecuentes).}
+\label{fig:arresto}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{../outputs/figures/fig2_hour_by_arrest_boxplot.png}
+\caption{Hora del delito según si hubo arresto.}
+\label{fig:boxplot}
+\end{figure}
+
+\textbf{Interpretación.} La tasa de arresto global es 19.24\%, pero varía
+fuertemente según el tipo de delito (Figura \ref{fig:arresto}): "OTHER
+OFFENSE" tiene la tasa más alta (22.2\%), seguida de BATTERY (19.8\%) y
+ASSAULT (17.8\%); en el otro extremo, BURGLARY y DECEPTIVE PRACTICE
+comparten la tasa más baja (3.7\%). La prueba $\chi^2$ de independencia
+entre \texttt{Primary Type} y \texttt{Arrest} (8 categorías más frecuentes)
+da $\chi^2 = 5476.7$, $\text{gl} = 7$, $p < 0.001$, rechazando con amplio
+margen la hipótesis nula de independencia. El boxplot de la Figura
+\ref{fig:boxplot} no muestra una diferencia horaria marcada entre incidentes
+con y sin arresto.
+
+\textbf{Conclusión intermedia.} Se \textbf{confirma} la Hipótesis 3: el tipo
+de delito es un fuerte predictor de si el incidente termina en arresto. La
+categoría "OTHER OFFENSE" -heterogénea por definición- concentra la mayor
+tasa, lo que sugiere revisar en el sistema de Visual Analytics si conviene
+desagregarla usando el campo \texttt{Description} o \texttt{IUCR} para no
+perder interpretabilidad.
+
+\subsection*{Hipótesis 4: violencia doméstica según tipo de lugar}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{../outputs/figures/fig9_domestic_rate_by_location.png}
+\caption{Proporción de incidentes domésticos según tipo de lugar (6 lugares
+más frecuentes).}
+\label{fig:domestico}
+\end{figure}
+
+\textbf{Interpretación.} La tasa global de incidentes marcados como
+\texttt{Domestic} es 16.31\%, pero se dispara a 43.1\% en
+\texttt{APARTMENT} y 33.8\% en \texttt{RESIDENCE}, frente a solo 8.2\% en
+\texttt{STREET} y 5.8\% en \texttt{PARKING LOT/GARAGE} (Figura
+\ref{fig:domestico}). La prueba $\chi^2$ de independencia entre
+\texttt{Location Description} y \texttt{Domestic} (6 categorías más
+frecuentes) da $\chi^2 = 14917.8$, $\text{gl} = 5$, $p < 0.001$, un efecto
+aún más marcado que en la Hipótesis 3.
+
+\textbf{Conclusión intermedia.} Se \textbf{confirma} la Hipótesis 4: la
+violencia doméstica está fuertemente asociada al hogar como lugar de
+ocurrencia (apartamento/residencia), en línea con el conocimiento de
+dominio en criminología. Este resultado también funciona como una
+verificación de consistencia (\textit{sanity check}) que respalda la
+validez general del dataset.
+
+% ============================================================================
+\section{Conclusiones}
+
+\textbf{Resumen del conocimiento obtenido.} El dataset de crímenes de
+Chicago (extracto ene--ago 2017, 172,327 registros) exhibe: (i) una
+distribución de tipos de delito muy sesgada, dominada por THEFT y BATTERY;
+(ii) una concentración espacial moderada del crimen en unos pocos distritos
+(30.4\% en los 5 principales); (iii) un ritmo temporal diario marcado, con
+mayor actividad entre el mediodía y la noche y mínima actividad de
+madrugada, y una intensidad mensual algo mayor en los meses de verano
+boreal (julio); (iv) diferencias grandes y estadísticamente significativas
+en la tasa de arresto según el tipo de delito, y (v) una fuerte asociación,
+también significativa, entre violencia doméstica y el hogar como lugar del
+incidente.
+
+\textbf{Respuesta final a las hipótesis.}
+\begin{itemize}
+    \item \textbf{H1 (espacial): confirmada.} Los 5 distritos con más
+    delitos concentran 30.4\% del total; existe evidencia de hotspots
+    espaciales.
+    \item \textbf{H2 (temporal): confirmada.} Hay patrones horarios y
+    mensuales claros (aunque el patrón horario en punta requiere lectura
+    cuidadosa por el artefacto de captura a las 12:00), con muy poca
+    variación por día de la semana.
+    \item \textbf{H3 (esclarecimiento): confirmada.} La tasa de arresto
+    depende fuertemente del tipo de delito ($\chi^2=5476.7$, $p<0.001$).
+    \item \textbf{H4 (violencia doméstica y lugar): confirmada.} La
+    proporción de casos domésticos depende fuertemente del tipo de lugar
+    ($\chi^2=14917.8$, $p<0.001$).
+\end{itemize}
+
+\textbf{Principales sorpresas y desafíos.} El hallazgo más relevante desde
+el punto de vista de calidad de datos fue el \textbf{artefacto de captura a
+las 12:00:00~PM}, que de no documentarse podría llevar a sobreestimar la
+criminalidad al mediodía. También resultó revelador que el extracto
+\emph{no} cubre el año calendario completo (termina el 25 de agosto), lo
+que obliga a normalizar por días antes de comparar meses; y que la
+aparente "duplicidad" de \texttt{Case Number} en 27 casos no es un error,
+sino el reflejo correcto de que los homicidios se registran por víctima.
+Finalmente, la fuerte redundancia entre \texttt{Beat} y \texttt{District}
+($r\approx 1.00$) es un recordatorio de que no toda variable adicional
+aporta información nueva.
+
+\textbf{Puente hacia Visual Analytics.} Estos hallazgos definen las
+prioridades de la siguiente etapa del curso, el diseño del sistema de Visual
+Analytics inspirado en CrimAnalyzer \cite{crimanalyzer}:
+
+\begin{enumerate}
+    \item \textbf{Vistas espacio-temporales enlazadas:} un mapa interactivo
+    (a nivel de distrito o de coordenadas) enlazado con una vista temporal
+    (hora $\times$ día, similar a la Figura \ref{fig:heatmap_hora_dia}),
+    replicando la filosofía central de CrimAnalyzer de exploración conjunta
+    espacio + tiempo.
+    \item \textbf{Detección de hotspots más allá del volumen bruto:} dado
+    que la concentración espacial es notoria pero no extrema, conviene
+    implementar un mecanismo de detección de hotspots (p. ej. NMF, como en
+    CrimAnalyzer) que identifique zonas de interés que un ranking simple por
+    volumen pasaría por alto.
+    \item \textbf{Filtros interactivos por tipo de delito, arresto y lugar:}
+    justificados por las fuertes diferencias encontradas en las Hipótesis
+    3 y 4.
+    \item \textbf{Manejo explícito en la interfaz de la incertidumbre de los
+    datos:} el sistema debe señalar visualmente los registros sin
+    geocodificar (3.54\%) y advertir sobre el artefacto de las 12:00~PM, en
+    vez de ocultarlos silenciosamente.
+    \item \textbf{Evitar redundancia visual:} no usar \texttt{Beat} y 
+    \texttt{District} simultáneamente como canales visuales independientes,
+    dada su altísima correlación.
+\end{enumerate}
+
+% ============================================================================
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+% ============================================================================
+\section{Anexos}
+
+\begin{itemize}
+    \item \textbf{Notebook completo y reproducible:}
+    \texttt{analisis\_chicago\_2017.ipynb} (adjunto a esta entrega), que
+    contiene la carga de datos, el wrangling, el cálculo de todos los
+    estadísticos citados en este informe y el código de generación de las
+    10 figuras utilizadas.
+    \item \textbf{Datos:} archivo \texttt{crimes\_2017.csv} (extracto
+    oficial enero--agosto 2017 usado en este informe) y enlace al dataset
+    completo en el portal oficial (Sección 4).
+    \item \textbf{Figuras:} carpeta \texttt{../outputs/figures/}, generada
+    automáticamente al ejecutar el notebook.
+\end{itemize}
+
+\end{document}
